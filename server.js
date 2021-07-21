@@ -2,7 +2,7 @@ const path = require('path');
 const http = require('http');
 const express = require('express');
 const socketio = require('socket.io');
-const formatMessage = require('./utils');
+const formatMessage = require('./utils/messages');
 
 const app = express();
 //we could create server through express, but we want to use it directly
@@ -32,7 +32,7 @@ io.on('connection', socket => {
     });
 
     //listen for chatMessage
-    socket.on('chatMessage', (msg) => {
+    socket.on('chatMessage', msg => {
         //we want to emit it to everybody, instead of console
         io.emit('message', formatMessage('USER', msg));
     });
