@@ -3,39 +3,71 @@ const http = require('http');
 const express = require('express');
 const socketio = require('socket.io');
 const formatMessage = require('./utils/messages');
+const {
+  userJoin,
+  getCurrentUser,
+  userLeave,
+  getRoomUsers
+} = require('./utils/users');
 
 const app = express();
-//we could create server through express, but we want to use it directly
 const server = http.createServer(app);
 const io = socketio(server);
 
-
-//to set static folder, so that we can use our front end part
+// Set static folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-const botName = 'ChatApp Bot';
+const botName = 'ChatCord Bot';
 
-//run when client connects
+// Run when client connects
 io.on('connection', socket => {
-    //now this will emit the message
-    //this message is shown to the single user thats connecting
-    socket.emit('message', formatMessage(botName, 'Welcome to ChatApp!'));
+  socket.on('joinRoom', ({ username, room }) => {
+    const user = userJoin(socket.id, username, room);
 
-    //broadcast when a user connects
-    //this message will shown to everyone except the client that joined the chat
-    socket.broadcast.emit('message', formatMessage(botName,  'A user has joined the chat'));
+    socket.join(user.room);
 
-    //Runs when client disconnects
-    socket.on('disconnect', () =>{
-        //io.emit as to show this message to everyone
-        io.emit('message', formatMessage(botName, 'A user has left the chat'));
+    // Welcome current user
+    socket.emit('message', formatMessage(botName, 'Welcome to ChatCord!'));
+
+    // Broadcast when a user connects
+    socket.broadcast
+      .to(user.room)
+      .emit(
+        'message',
+        formatMessage(botName, `${user.username} has joined the chat`)
+      );
+
+    // Send users and room info
+    io.to(user.room).emit('roomUsers', {
+      room: user.room,
+      users: getRoomUsers(user.room)
     });
+  });
 
-    //listen for chatMessage
-    socket.on('chatMessage', msg => {
-        //we want to emit it to everybody, instead of console
-        io.emit('message', formatMessage('USER', msg));
-    });
+  // Listen for chatMessage
+  socket.on('chatMessage', msg => {
+    const user = getCurrentUser(socket.id);
+
+    io.to(user.room).emit('message', formatMessage(user.username, msg));
+  });
+
+  // Runs when client disconnects
+  socket.on('disconnect', () => {
+    const user = userLeave(socket.id);
+
+    if (user) {
+      io.to(user.room).emit(
+        'message',
+        formatMessage(botName, `${user.username} has left the chat`)
+      );
+
+      // Send users and room info
+      io.to(user.room).emit('roomUsers', {
+        room: user.room,
+        users: getRoomUsers(user.room)
+      });
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
